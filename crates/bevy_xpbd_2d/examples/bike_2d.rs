@@ -1,10 +1,12 @@
 use bevy::prelude::*;
 use bevy_xpbd_2d::{math::*, prelude::*};
 use examples_common_2d::XpbdExamplePlugin;
+use bevy_editor_pls;
 
 fn main() {
     App::new()
         .add_plugins((DefaultPlugins, XpbdExamplePlugin))
+        //.add_plugins(bevy_editor_pls::EditorPlugin::default())
         .insert_resource(ClearColor(Color::rgb(0.05, 0.05, 0.1)))
         .insert_resource(SubstepCount(50))
         .insert_resource(Gravity(Vector::NEG_Y * 20.0))
@@ -18,12 +20,18 @@ fn main() {
 #[derive(Component)]
 struct Motor;
 
+#[derive(Component)]
+struct MotorCamera;
+
 /// The part of the body where motor torque should be applied as a fake reaction force (in the opposite direction compared to the motor).
 #[derive(Component)]
 struct MotorTorqueBody;
 
 fn setup(mut commands: Commands) {
-    commands.spawn(Camera2dBundle::default());
+    commands.spawn((
+        Camera2dBundle::default(),
+        MotorCamera,
+    ));
 
     let square_sprite = Sprite {
         color: Color::rgb(0.2, 0.7, 0.9),
@@ -59,21 +67,21 @@ fn setup(mut commands: Commands) {
             },
             RigidBody::Dynamic,
             Collider::ball(30.0),
-            MassPropertiesBundle::new_computed(&Collider::ball(30.0), 0.5),
-            ExternalTorque::new(0.0).with_persistence(true),
-            Friction {
+            MassPropertiesBundle::new_computed(&Collider::ball(30.0), 1.0),
+            //ExternalTorque::new(0.0).with_persistence(true),
+            /*Friction {
                 static_coefficient: 1000.0,
                 ..Default::default()
             },
             Restitution {
-                coefficient: 0.05,
+                coefficient: 0.005,
                 combine_rule: CoefficientCombine::Min,
-            },
+            },*/
             Motor,
         ))
         .id();
-
-    let motor_joint = commands
+/*
+    let motor_axle = commands
         .spawn((
             RigidBody::Dynamic,
             MassPropertiesBundle::new_computed(&Collider::ball(3.0), 0.1),
@@ -81,7 +89,7 @@ fn setup(mut commands: Commands) {
             MotorTorqueBody,
         ))
         .id();
-        
+        */
     let wheel = commands
         .spawn((
             SpriteBundle {
@@ -92,10 +100,10 @@ fn setup(mut commands: Commands) {
             RigidBody::Dynamic,
             Collider::ball(30.0),
             MassPropertiesBundle::new_computed(&Collider::ball(30.0), 0.1),
-            Restitution {
-                coefficient: 0.05,
+            /*Restitution {
+                coefficient: 0.005,
                 combine_rule: CoefficientCombine::Min,
-            },
+            },*/
         ))
         .id();
         
@@ -119,11 +127,11 @@ fn setup(mut commands: Commands) {
         Motor,
     ));
 
-    commands.spawn((
-        FixedJoint::new(motor_joint, body)
+/*    commands.spawn((
+        FixedJoint::new(motor_axle, body)
             .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -100.0),
     ));
-
+*/
     commands.spawn(
         RevoluteJoint::new(wheel, body)
             .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * 100.0)
@@ -174,10 +182,10 @@ fn motor_run(
     time: Res<Time>,
     keyboard_input: Res<Input<KeyCode>>,
     mut motors: Query<&mut ExternalTorque, With<Motor>>,
-    mut application_points: Query<
+    /*mut application_points: Query<
         &mut ExternalTorque,
         (With<MotorTorqueBody>, Without<Motor>),
-    >,
+    >,*/
 ) {
     // Precision is adjusted so that the example works with
     // both the `f32` and `f64` features. Otherwise you don't need this.
@@ -186,24 +194,19 @@ fn motor_run(
     let magnitude = -5000000.0;
     // quadratic complexity, but we have one of each so whatever. The code is less bug-prone this way
     for mut torque in &mut motors {
-        for mut antitorque in &mut application_points {
-            if keyboard_input.any_pressed([KeyCode::W, KeyCode::Up]) {
+        //for mut antitorque in &mut application_points {
+            /*if keyboard_input.any_pressed([KeyCode::W, KeyCode::Up]) {
                 *torque = ExternalTorque::new(magnitude)
-                    .with_persistence(true);
-                *antitorque = ExternalTorque::new(-magnitude)
-                    .with_persistence(true);
+                    .with_persistence(false);
+/*                *antitorque = ExternalTorque::new(-magnitude)
+                    .with_persistence(false);*/
             } else if keyboard_input.any_pressed([KeyCode::S, KeyCode::Down]) {
                 *torque = ExternalTorque::new(-magnitude)
-                    .with_persistence(true);
-                *antitorque = ExternalTorque::new(magnitude)
-                    .with_persistence(true);
-            } else {
-                *torque = ExternalTorque::new(-0.0)
-                    .with_persistence(true);
-                *antitorque = ExternalTorque::new(0.0)
-                    .with_persistence(true);
-            }
-        }
+                    .with_persistence(false);
+/*                *antitorque = ExternalTorque::new(magnitude)
+                    .with_persistence(false);*/
+            }*/
+        //}
     }
 }
 
@@ -212,7 +215,7 @@ fn camera_follow(
     motors: Query<Ref<Transform>, With<Motor>>,
     mut cameras: Query<
         &mut Transform,
-        (With<Camera>, Without<Motor>),
+        (With<MotorCamera>, Without<Motor>),
     >,
 ) {
     let motor_x = motors.single().translation.x;

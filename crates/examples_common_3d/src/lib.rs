@@ -1,4 +1,5 @@
 use std::time::Duration;
+pub use bevy_editor_pls;
 
 use bevy::{
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},

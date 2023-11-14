@@ -46,6 +46,7 @@ itertools = "0.11"
 examples_common_2d = { path = "../examples_common_2d" }
 approx = "0.5"
 insta = "1.0"
+bevy_editor_pls = { git = "https://github.com/jakobhellermann/bevy_editor_pls", branch = "main" }
 
 [[example]]
 name = "dynamic_character_2d"
