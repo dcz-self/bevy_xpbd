@@ -67,16 +67,17 @@ fn setup(mut commands: Commands) {
             },
             RigidBody::Dynamic,
             Collider::ball(30.0),
-            MassPropertiesBundle::new_computed(&Collider::ball(30.0), 1.0),
+            Mass(0.1),
             //ExternalTorque::new(0.0).with_persistence(true),
-            /*Friction {
+            Friction {
                 static_coefficient: 1000.0,
+                dynamic_coefficient: 1000.0,
                 ..Default::default()
             },
             Restitution {
                 coefficient: 0.005,
                 combine_rule: CoefficientCombine::Min,
-            },*/
+            },
             Motor,
         ))
         .id();
@@ -99,7 +100,7 @@ fn setup(mut commands: Commands) {
             },
             RigidBody::Dynamic,
             Collider::ball(30.0),
-            MassPropertiesBundle::new_computed(&Collider::ball(30.0), 0.1),
+            Mass(0.1),
             /*Restitution {
                 coefficient: 0.005,
                 combine_rule: CoefficientCombine::Min,
@@ -115,15 +116,15 @@ fn setup(mut commands: Commands) {
             },
             RigidBody::Dynamic,
             Collider::cuboid(50.0, 50.0),
-            Mass(1.0),
+            Mass(0.1),
         ))
         .id();
         
     commands.spawn((
         RevoluteJoint::new(motor, body)
-            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -100.0)
-            .with_linear_velocity_damping(0.0)
-            .with_angular_velocity_damping(0.0),
+            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -100.0),
+            //.with_linear_velocity_damping(0.0)
+            //.with_angular_velocity_damping(0.0),
         Motor,
     ));
 
@@ -195,7 +196,7 @@ fn motor_run(
     // quadratic complexity, but we have one of each so whatever. The code is less bug-prone this way
     for mut torque in &mut motors {
         //for mut antitorque in &mut application_points {
-            /*if keyboard_input.any_pressed([KeyCode::W, KeyCode::Up]) {
+            if keyboard_input.any_pressed([KeyCode::W, KeyCode::Up]) {
                 *torque = ExternalTorque::new(magnitude)
                     .with_persistence(false);
 /*                *antitorque = ExternalTorque::new(-magnitude)
@@ -205,7 +206,7 @@ fn motor_run(
                     .with_persistence(false);
 /*                *antitorque = ExternalTorque::new(magnitude)
                     .with_persistence(false);*/
-            }*/
+            }
         //}
     }
 }
