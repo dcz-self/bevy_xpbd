@@ -59,11 +59,15 @@ fn setup(mut commands: Commands) {
             },
             RigidBody::Dynamic,
             Collider::ball(30.0),
-            MassPropertiesBundle::new_computed(&Collider::ball(30.0), 0.1),
+            MassPropertiesBundle::new_computed(&Collider::ball(30.0), 0.5),
             ExternalTorque::new(0.0).with_persistence(true),
             Friction {
                 static_coefficient: 1000.0,
                 ..Default::default()
+            },
+            Restitution {
+                coefficient: 0.05,
+                combine_rule: CoefficientCombine::Min,
             },
             Motor,
         ))
@@ -88,6 +92,10 @@ fn setup(mut commands: Commands) {
             RigidBody::Dynamic,
             Collider::ball(30.0),
             MassPropertiesBundle::new_computed(&Collider::ball(30.0), 0.1),
+            Restitution {
+                coefficient: 0.05,
+                combine_rule: CoefficientCombine::Min,
+            },
         ))
         .id();
         
@@ -175,7 +183,7 @@ fn motor_run(
     // both the `f32` and `f64` features. Otherwise you don't need this.
     //let delta_time = time.delta_seconds_f64().adjust_precision();
     
-    let magnitude = -50000000.0;
+    let magnitude = -5000000.0;
     // quadratic complexity, but we have one of each so whatever. The code is less bug-prone this way
     for mut torque in &mut motors {
         for mut antitorque in &mut application_points {
