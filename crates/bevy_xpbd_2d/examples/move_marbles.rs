@@ -31,17 +31,7 @@ fn setup(
         ..default()
     };
 
-    // Ceiling
-    commands.spawn((
-        SpriteBundle {
-            sprite: square_sprite.clone(),
-            transform: Transform::from_xyz(0.0, 50.0 * 6.0, 0.0)
-                .with_scale(Vec3::new(20.0, 1.0, 1.0)),
-            ..default()
-        },
-        RigidBody::Static,
-        Collider::cuboid(50.0, 50.0),
-    ));
+
     // Floor
     commands.spawn((
         SpriteBundle {
@@ -53,36 +43,16 @@ fn setup(
         RigidBody::Static,
         Collider::cuboid(50.0, 50.0),
     ));
-    // Left wall
-    commands.spawn((
-        SpriteBundle {
-            sprite: square_sprite.clone(),
-            transform: Transform::from_xyz(-50.0 * 9.5, 0.0, 0.0)
-                .with_scale(Vec3::new(1.0, 11.0, 1.0)),
-            ..default()
-        },
-        RigidBody::Static,
-        Collider::cuboid(50.0, 50.0),
-    ));
-    // Right wall
-    commands.spawn((
-        SpriteBundle {
-            sprite: square_sprite,
-            transform: Transform::from_xyz(50.0 * 9.5, 0.0, 0.0)
-                .with_scale(Vec3::new(1.0, 11.0, 1.0)),
-            ..default()
-        },
-        RigidBody::Static,
-        Collider::cuboid(50.0, 50.0),
-    ));
 
     let marble_radius = 5.0;
     let marble_mesh = meshes.add(shape::Circle::new(marble_radius).into());
     let marble_material = materials.add(ColorMaterial::from(Color::rgb(0.2, 0.7, 0.9)));
 
     // Spawn stacks of marbles
-    for x in -20..20 {
-        for y in -20..20 {
+//    for x in -20..20 {
+//        for y in -20..20 {
+    let x = 1;
+    let y = 1;
             commands.spawn((
                 MaterialMesh2dBundle {
                     mesh: marble_mesh.clone().into(),
@@ -98,8 +68,27 @@ fn setup(
                 Collider::ball(marble_radius as Scalar),
                 Marble,
             ));
-        }
-    }
+      //  }
+    //}
+
+            
+    let wheel_sprite = Sprite {
+        color: Color::rgb(0.9, 0.7, 0.9),
+        custom_size: Some(Vec2::splat(50.0)),
+        ..default()
+    };
+            
+    let wheel = commands
+        .spawn((
+            SpriteBundle {
+                sprite: wheel_sprite.clone(),
+                ..default()
+            },
+            RigidBody::Dynamic,
+            AngularVelocity(1.5),
+            Collider::ball(25.0),
+        ))
+        .id();
 }
 
 fn movement(

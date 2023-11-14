@@ -1,0 +1,213 @@
+use bevy::prelude::*;
+use bevy_xpbd_2d::{math::*, prelude::*};
+use examples_common_2d::XpbdExamplePlugin;
+
+fn main() {
+    App::new()
+        .add_plugins((DefaultPlugins, XpbdExamplePlugin))
+        .insert_resource(ClearColor(Color::rgb(0.05, 0.05, 0.1)))
+        .insert_resource(SubstepCount(50))
+        .insert_resource(Gravity(Vector::NEG_Y * 20.0))
+        .add_systems(Startup, setup)
+        .add_systems(Update, motor_run)
+        .add_systems(Update, camera_follow)
+        .run();
+}
+
+/// Camera centers on this. Player applies torque to this.
+#[derive(Component)]
+struct Motor;
+
+/// The part of the body where motor torque should be applied as a fake reaction force (in the opposite direction compared to the motor).
+#[derive(Component)]
+struct MotorTorqueBody;
+
+fn setup(mut commands: Commands) {
+    commands.spawn(Camera2dBundle::default());
+
+    let square_sprite = Sprite {
+        color: Color::rgb(0.2, 0.7, 0.9),
+        custom_size: Some(Vec2::splat(50.0)),
+        ..default()
+    };
+
+    
+    let motor_sprite = Sprite {
+        color: Color::rgb(0.9, 0.7, 0.9),
+        custom_size: Some(Vec2::splat(50.0)),
+        ..default()
+    };
+    
+    let wheel_sprite = Sprite {
+        color: Color::rgb(0.2, 0.2, 0.9),
+        custom_size: Some(Vec2::splat(50.0)),
+        ..default()
+    };
+
+    let floor_sprite = Sprite {
+        color: Color::rgb(0.2, 0.7, 0.2),
+        custom_size: Some(Vec2::splat(50.0)),
+        ..default()
+    };
+    
+    let motor = commands
+        .spawn((
+            SpriteBundle {
+                sprite: motor_sprite.clone(),
+                transform: Transform::from_xyz(-100.0, -100.0, 0.0),
+                ..default()
+            },
+            RigidBody::Dynamic,
+            Collider::ball(30.0),
+            MassPropertiesBundle::new_computed(&Collider::ball(30.0), 0.1),
+            ExternalTorque::new(0.0).with_persistence(true),
+            Friction {
+                static_coefficient: 1000.0,
+                ..Default::default()
+            },
+            Motor,
+        ))
+        .id();
+
+    let motor_joint = commands
+        .spawn((
+            RigidBody::Dynamic,
+            MassPropertiesBundle::new_computed(&Collider::ball(3.0), 0.1),
+            ExternalTorque::new(-0.0).with_persistence(true),
+            MotorTorqueBody,
+        ))
+        .id();
+        
+    let wheel = commands
+        .spawn((
+            SpriteBundle {
+                sprite: wheel_sprite.clone(),
+                transform: Transform::from_xyz(100.0, -100.0, 0.0),
+                ..default()
+            },
+            RigidBody::Dynamic,
+            Collider::ball(30.0),
+            MassPropertiesBundle::new_computed(&Collider::ball(30.0), 0.1),
+        ))
+        .id();
+        
+    let body = commands
+        .spawn((
+            SpriteBundle {
+                sprite: square_sprite,
+                ..default()
+            },
+            RigidBody::Dynamic,
+            Collider::cuboid(50.0, 50.0),
+            Mass(1.0),
+        ))
+        .id();
+        
+    commands.spawn((
+        RevoluteJoint::new(motor, body)
+            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -100.0)
+            .with_linear_velocity_damping(0.0)
+            .with_angular_velocity_damping(0.0),
+        Motor,
+    ));
+
+    commands.spawn((
+        FixedJoint::new(motor_joint, body)
+            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -100.0),
+    ));
+
+    commands.spawn(
+        RevoluteJoint::new(wheel, body)
+            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * 100.0)
+    );
+    
+    const FLOOR_WIDTH: u64 = 100000;
+    
+    commands.spawn((
+        SpriteBundle {
+            sprite: floor_sprite.clone(),
+            transform: Transform::from_xyz(0.0, -50.0 * 6.0, 0.0)
+                .with_scale(Vec3::new(FLOOR_WIDTH as f32 / 50.0, 1.0, 1.0)),
+            ..default()
+        },
+        RigidBody::Static,
+        Collider::cuboid(FLOOR_WIDTH as f32, 50.0),
+    ));
+    
+    const CLOUD_SPACING: u64 = 300;
+    
+    let cloud_sprite = Sprite {
+        color: Color::rgb(0.7, 0.7, 0.7),
+        custom_size: Some(Vec2::splat(50.0)),
+        ..default()
+    };
+    
+    fn hash(v: u64) -> u64 {
+        // Something something Knuth.
+        // https://stackoverflow.com/a/665545
+        (v * 2654435761) % (1 << 32)
+    }
+    
+    for i in 0..(FLOOR_WIDTH / CLOUD_SPACING) {
+        let offset = (i * CLOUD_SPACING) as i64 - FLOOR_WIDTH as i64 / 2;
+        commands.spawn(SpriteBundle {
+            sprite: cloud_sprite.clone(),
+            // y=-1 -> background
+            transform: Transform::from_xyz(offset as f32, 100.0, -1.0)
+                // randomize the rotation or else it's even more unclear what the squares are
+                .with_rotation(Quat::from_rotation_z(hash(i) as f32)),
+            ..default()
+        });
+    }
+}
+
+
+fn motor_run(
+    time: Res<Time>,
+    keyboard_input: Res<Input<KeyCode>>,
+    mut motors: Query<&mut ExternalTorque, With<Motor>>,
+    mut application_points: Query<
+        &mut ExternalTorque,
+        (With<MotorTorqueBody>, Without<Motor>),
+    >,
+) {
+    // Precision is adjusted so that the example works with
+    // both the `f32` and `f64` features. Otherwise you don't need this.
+    //let delta_time = time.delta_seconds_f64().adjust_precision();
+    
+    let magnitude = -50000000.0;
+    // quadratic complexity, but we have one of each so whatever. The code is less bug-prone this way
+    for mut torque in &mut motors {
+        for mut antitorque in &mut application_points {
+            if keyboard_input.any_pressed([KeyCode::W, KeyCode::Up]) {
+                *torque = ExternalTorque::new(magnitude)
+                    .with_persistence(true);
+                *antitorque = ExternalTorque::new(-magnitude)
+                    .with_persistence(true);
+            } else if keyboard_input.any_pressed([KeyCode::S, KeyCode::Down]) {
+                *torque = ExternalTorque::new(-magnitude)
+                    .with_persistence(true);
+                *antitorque = ExternalTorque::new(magnitude)
+                    .with_persistence(true);
+            } else {
+                *torque = ExternalTorque::new(-0.0)
+                    .with_persistence(true);
+                *antitorque = ExternalTorque::new(0.0)
+                    .with_persistence(true);
+            }
+        }
+    }
+}
+
+fn camera_follow(
+    // the Motor could be a Resource instead, but grabbing the Entity directly saves Resource setup and is just as easy.
+    motors: Query<Ref<Transform>, With<Motor>>,
+    mut cameras: Query<
+        &mut Transform,
+        (With<Camera>, Without<Motor>),
+    >,
+) {
+    let motor_x = motors.single().translation.x;
+    let mut camera_transform = cameras.single_mut();
+    camera_transform.translation.x = motor_x + 300.0; // TODO: base offset on viewport width
+}
