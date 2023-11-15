@@ -1,22 +1,24 @@
 use bevy::prelude::*;
 use bevy_xpbd_2d::{math::*, prelude::*};
 use examples_common_2d::XpbdExamplePlugin;
-use bevy_editor_pls;
+//use bevy_editor_pls;
 
 fn main() {
     App::new()
         .add_plugins((DefaultPlugins, XpbdExamplePlugin))
+        // p=pause, Return=step
         //.add_plugins(bevy_editor_pls::EditorPlugin::default())
         .insert_resource(ClearColor(Color::rgb(0.05, 0.05, 0.1)))
         .insert_resource(SubstepCount(50))
-        .insert_resource(Gravity(Vector::NEG_Y * 20.0))
+        // higher gravity makes the wheelies faster
+        .insert_resource(Gravity(Vector::NEG_Y * 40.0))
         .add_systems(Startup, setup)
         .add_systems(Update, motor_run)
         .add_systems(Update, camera_follow)
         .run();
 }
 
-/// Camera centers on this. Player applies torque to this.
+/// MotorCamera centers on this. Player applies torque to this.
 #[derive(Component)]
 struct Motor;
 
@@ -67,7 +69,9 @@ fn setup(mut commands: Commands) {
             },
             RigidBody::Dynamic,
             Collider::ball(30.0),
-            Mass(0.0001),
+            // super low mass, so that landing makes the wheel take ground's speed rather than jolt the entire mass and bounce off
+            Mass(0.0000001),
+            // stick to the ground!
             Friction {
                 static_coefficient: 1000.0,
                 dynamic_coefficient: 1000.0,
@@ -80,16 +84,7 @@ fn setup(mut commands: Commands) {
             Motor,
         ))
         .id();
-/*
-    let motor_axle = commands
-        .spawn((
-            RigidBody::Dynamic,
-            MassPropertiesBundle::new_computed(&Collider::ball(3.0), 0.1),
-            ExternalTorque::new(-0.0).with_persistence(true),
-            MotorTorqueBody,
-        ))
-        .id();
-        */
+
     let wheel = commands
         .spawn((
             SpriteBundle {
@@ -99,12 +94,13 @@ fn setup(mut commands: Commands) {
             },
             RigidBody::Dynamic,
             Collider::ball(30.0),
-            Mass(0.00001),
-            
-            /*Restitution {
+            Mass(0.000001),
+            // less bouncy in general
+            Restitution {
                 coefficient: 0.005,
                 combine_rule: CoefficientCombine::Min,
-            },*/
+            },
+
             Friction {
                 static_coefficient: 1000.0,
                 dynamic_coefficient: 1000.0,
@@ -122,6 +118,12 @@ fn setup(mut commands: Commands) {
             RigidBody::Dynamic,
             Collider::cuboid(50.0, 50.0),
             Mass(0.0001),
+            // feels weird it the motorcycle doesn't tumble after falling over
+            Friction {
+                static_coefficient: 40.0,
+                dynamic_coefficient: 40.0,
+                ..Default::default()
+            },
             MotorTorqueBody,
         ))
         .id();
@@ -129,18 +131,14 @@ fn setup(mut commands: Commands) {
     commands.spawn((
         RevoluteJoint::new(motor, body)
             .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -100.0)
-            // way glitchy otherwise
-            .with_compliance(0.0000001),
-            //.with_linear_velocity_damping(0.0)
-            //.with_angular_velocity_damping(0.0),
+            // way glitchy otherwise. A guess: if the collision has a smooth transition between "no contact" and "full force", then it doesn't "overreact" when the time step missed the exact time of something happening. Similar effect might have been had by adding penetration to the wheel (deformation), but doing that is underdocumented.
+            .with_compliance(0.0000001)
+            // maybe this will reduce bounciness on touching the ground: the contact with the ground will not try to move the entire mass of the bike but only the wheel - less of a jolt.
+            .with_linear_velocity_damping(0.0)
+            .with_angular_velocity_damping(0.0),
         Motor,
     ));
 
-/*    commands.spawn((
-        FixedJoint::new(motor_axle, body)
-            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -100.0),
-    ));
-*/
     commands.spawn(
         RevoluteJoint::new(wheel, body)
             .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * 100.0)
@@ -157,7 +155,20 @@ fn setup(mut commands: Commands) {
             ..default()
         },
         RigidBody::Static,
-        Collider::cuboid(FLOOR_WIDTH as f32, 50.0),
+        Collider::cuboid(50.0, 50.0),
+    ));
+    
+    // A tilted section of the floor to test jumps
+    commands.spawn((
+        SpriteBundle {
+            sprite: floor_sprite.clone(),
+            transform: Transform::from_xyz(400.0, -50.0 * 6.0, 0.0)
+                .with_rotation(Quat::from_rotation_z(0.1))
+                .with_scale(Vec3::new(600 as f32 / 50.0, 1.0, 1.0)),
+            ..default()
+        },
+        RigidBody::Static,
+        Collider::cuboid(50.0, 50.0),
     ));
     
     const CLOUD_SPACING: u64 = 300;
