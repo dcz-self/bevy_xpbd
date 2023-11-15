@@ -15,7 +15,7 @@ fn main() {
         .insert_resource(ClearColor(Color::rgb(0.05, 0.05, 0.1)))
         .insert_resource(SubstepCount(50))
         // higher gravity makes the wheelies faster
-        .insert_resource(Gravity(Vector::NEG_Y * 160.0))
+        .insert_resource(Gravity(Vector::NEG_Y * 320.0))
         .add_systems(Startup, setup)
         .add_systems(Update, motor_run)
         .add_systems(
@@ -159,7 +159,7 @@ fn setup(
             .with_compliance(0.000001)
             // ...together with this. When landing from a jump, the compliance accepts the jolt and damping dissipates it.
             // It feels a bit rubbery, though, and limits angling for wheelies for some reason. It might be fixable by introducing another joint type and replacing joint_damping system with one that treats radial velocity different than axial.
-            .with_linear_velocity_damping(5.0)
+            .with_linear_velocity_damping(10.0)
             // maybe this will reduce bounciness on touching the ground: the contact with the ground will not try to change the momentum the entire mass of the bike but only the wheel - less of a jolt.
             .with_angular_velocity_damping(0.0),
         Motor,
@@ -169,7 +169,7 @@ fn setup(
         RevoluteJoint::new(wheel, body)
             .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * 50.0)
             .with_compliance(0.000001)
-            .with_linear_velocity_damping(5.0),
+            .with_linear_velocity_damping(10.0),
     );
     
     const FLOOR_WIDTH: u64 = 100000;
@@ -316,7 +316,7 @@ fn motor_run(
     //let delta_time = time.delta_seconds_f64().adjust_precision();
     
     // 100% torque
-    let max_torque = -50000000.0;
+    let max_torque = -100000000.0;
 
     // quadratic complexity, but we have one of each so whatever. The code is less bug-prone this way
     for (mut torque, angular, linear, motor_transform) in &mut motors {
@@ -326,13 +326,13 @@ fn motor_run(
                 *torque = ExternalTorque::new(magnitude)
                     .with_persistence(false);
                 // the linear damping on joints interferes with torque. Let's make it stronger
-                *antitorque = ExternalTorque::new(-max_torque * 3.0)
+                *antitorque = ExternalTorque::new(-max_torque * 5.0)
                     .with_persistence(false);
             } else if keyboard_input.any_pressed([KeyCode::S, KeyCode::Down]) {
                 *torque = ExternalTorque::new(-magnitude)
                     .with_persistence(false);
                 // the linear damping on joints interferes with torque. Let's make it stronger
-                *antitorque = ExternalTorque::new(max_torque * 3.0)
+                *antitorque = ExternalTorque::new(max_torque * 5.0)
                     .with_persistence(false);
             }
             // Not physical: straightening the bike back to horizontal. Hopefully gives a better feel.
@@ -344,7 +344,8 @@ fn motor_run(
                 let angle = vert_difference.atan2(horz_difference);
                 
                 // About 1 o'clock, to emulate air resistance keeping the whole thing upright.
-                let ideal_angle = std::f32::consts::TAU / 4.0 - std::f32::consts::TAU / 16.0;
+                // Maybe the ideal angle should depend on linear velocity...
+                let ideal_angle = std::f32::consts::TAU / 4.0 - std::f32::consts::TAU / 32.0;
                 
                 let difference_to_ideal = ideal_angle - angle;
                 
@@ -357,7 +358,7 @@ fn motor_run(
                     -1.0 + difference_to_ideal / (std::f32::consts::TAU / 2.0 - ideal_angle)
                 };
                 
-                *antitorque = ExternalTorque::new(magnitude * 5.0 * straightening_factor)
+                *antitorque = ExternalTorque::new(magnitude * 20.0 * straightening_factor)
                     .with_persistence(false);
             }
         }
