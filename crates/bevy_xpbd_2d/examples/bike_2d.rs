@@ -273,13 +273,13 @@ fn motor_run(
                 *torque = ExternalTorque::new(magnitude)
                     .with_persistence(false);
                 // the linear damping on joints interferes with torque. Let's make it stronger
-                *antitorque = ExternalTorque::new(-magnitude * 5.0)
+                *antitorque = ExternalTorque::new(-max_torque * 3.0)
                     .with_persistence(false);
             } else if keyboard_input.any_pressed([KeyCode::S, KeyCode::Down]) {
                 *torque = ExternalTorque::new(-magnitude)
                     .with_persistence(false);
                 // the linear damping on joints interferes with torque. Let's make it stronger
-                *antitorque = ExternalTorque::new(magnitude * 5.0)
+                *antitorque = ExternalTorque::new(max_torque * 3.0)
                     .with_persistence(false);
             }
             // Not physical: straightening the bike back to horizontal. Hopefully gives a better feel.
