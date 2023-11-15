@@ -67,15 +67,14 @@ fn setup(mut commands: Commands) {
             },
             RigidBody::Dynamic,
             Collider::ball(30.0),
-            Mass(0.1),
-            //ExternalTorque::new(0.0).with_persistence(true),
+            Mass(0.0001),
             Friction {
                 static_coefficient: 1000.0,
                 dynamic_coefficient: 1000.0,
                 ..Default::default()
             },
             Restitution {
-                coefficient: 0.005,
+                coefficient: 0.0005,
                 combine_rule: CoefficientCombine::Min,
             },
             Motor,
@@ -100,11 +99,17 @@ fn setup(mut commands: Commands) {
             },
             RigidBody::Dynamic,
             Collider::ball(30.0),
-            Mass(0.1),
+            Mass(0.00001),
+            
             /*Restitution {
                 coefficient: 0.005,
                 combine_rule: CoefficientCombine::Min,
             },*/
+            Friction {
+                static_coefficient: 1000.0,
+                dynamic_coefficient: 1000.0,
+                ..Default::default()
+            },
         ))
         .id();
         
@@ -116,13 +121,16 @@ fn setup(mut commands: Commands) {
             },
             RigidBody::Dynamic,
             Collider::cuboid(50.0, 50.0),
-            Mass(0.1),
+            Mass(0.0001),
+            MotorTorqueBody,
         ))
         .id();
         
     commands.spawn((
         RevoluteJoint::new(motor, body)
-            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -100.0),
+            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -100.0)
+            // way glitchy otherwise
+            .with_compliance(0.0000001),
             //.with_linear_velocity_damping(0.0)
             //.with_angular_velocity_damping(0.0),
         Motor,
@@ -136,6 +144,7 @@ fn setup(mut commands: Commands) {
     commands.spawn(
         RevoluteJoint::new(wheel, body)
             .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * 100.0)
+            .with_compliance(0.0000001),
     );
     
     const FLOOR_WIDTH: u64 = 100000;
@@ -183,31 +192,37 @@ fn motor_run(
     time: Res<Time>,
     keyboard_input: Res<Input<KeyCode>>,
     mut motors: Query<&mut ExternalTorque, With<Motor>>,
-    /*mut application_points: Query<
+    mut application_points: Query<
         &mut ExternalTorque,
         (With<MotorTorqueBody>, Without<Motor>),
-    >,*/
+    >,
 ) {
     // Precision is adjusted so that the example works with
     // both the `f32` and `f64` features. Otherwise you don't need this.
     //let delta_time = time.delta_seconds_f64().adjust_precision();
     
-    let magnitude = -5000000.0;
+    let magnitude = -50000000.0;
     // quadratic complexity, but we have one of each so whatever. The code is less bug-prone this way
     for mut torque in &mut motors {
-        //for mut antitorque in &mut application_points {
+        for mut antitorque in &mut application_points {
             if keyboard_input.any_pressed([KeyCode::W, KeyCode::Up]) {
                 *torque = ExternalTorque::new(magnitude)
                     .with_persistence(false);
-/*                *antitorque = ExternalTorque::new(-magnitude)
-                    .with_persistence(false);*/
+                //*torque = ExternalForce::new(Vec2::new(magnitude, 0.0))
+                  //  .with_persistence(false);
+                
+                *antitorque = ExternalTorque::new(-magnitude)
+                    .with_persistence(false);
             } else if keyboard_input.any_pressed([KeyCode::S, KeyCode::Down]) {
                 *torque = ExternalTorque::new(-magnitude)
                     .with_persistence(false);
-/*                *antitorque = ExternalTorque::new(magnitude)
-                    .with_persistence(false);*/
+                //torque.0 -= 2.0;
+                //*torque = ExternalForce::new(Vec2::new(-magnitude, 0.0))
+                  //  .with_persistence(false);
+                *antitorque = ExternalTorque::new(magnitude)
+                    .with_persistence(false);
             }
-        //}
+        }
     }
 }
 
