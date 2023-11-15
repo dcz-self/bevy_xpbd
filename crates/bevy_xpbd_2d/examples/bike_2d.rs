@@ -304,7 +304,7 @@ fn motor_run(
                     -1.0 + difference_to_ideal / (std::f32::consts::TAU / 2.0 - ideal_angle)
                 };
                 
-                *antitorque = ExternalTorque::new(magnitude * 5.0 * dbg!(straightening_factor))
+                *antitorque = ExternalTorque::new(magnitude * 5.0 * straightening_factor)
                     .with_persistence(false);
             }
         }
