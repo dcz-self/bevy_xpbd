@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy_xpbd_2d::{math::*, prelude::*};
 use examples_common_2d::XpbdExamplePlugin;
+
 //use bevy_editor_pls;
 
 fn main() {
@@ -132,9 +133,13 @@ fn setup(mut commands: Commands) {
         RevoluteJoint::new(motor, body)
             .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -100.0)
             // way glitchy otherwise. A guess: if the collision has a smooth transition between "no contact" and "full force", then it doesn't "overreact" when the time step missed the exact time of something happening. Similar effect might have been had by adding penetration to the wheel (deformation), but doing that is underdocumented.
-            .with_compliance(0.0000001)
+            // also: maybe this reduces bounciness..
+            .with_compliance(0.000001)
+            // ...together with this. When landing from a jump, the compliance accepts the jolt and damping dissipates it.
+            // It feels a bit rubbery, though, and limits angling for wheelies for some reason.
+            // TODO: limit torque when flying
+            .with_linear_velocity_damping(15.0)
             // maybe this will reduce bounciness on touching the ground: the contact with the ground will not try to move the entire mass of the bike but only the wheel - less of a jolt.
-            .with_linear_velocity_damping(0.0)
             .with_angular_velocity_damping(0.0),
         Motor,
     ));
@@ -142,7 +147,8 @@ fn setup(mut commands: Commands) {
     commands.spawn(
         RevoluteJoint::new(wheel, body)
             .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * 100.0)
-            .with_compliance(0.0000001),
+            .with_compliance(0.000001)
+            .with_linear_velocity_damping(15.0),
     );
     
     const FLOOR_WIDTH: u64 = 100000;
@@ -199,10 +205,35 @@ fn setup(mut commands: Commands) {
 }
 
 
+fn clamp(v: f32) -> f32 {
+    if v < 0.0 {
+        0.0
+    } else if v > 1.0 {
+        1.0
+    } else {
+        v
+    }
+}
+
+/// Returns absolute percentage
+fn current_torque(angular: f32) -> f32 {
+    // Idle spinning angular velocity forward
+    let max_angular = 30.0;
+    let max_angular_reverse = max_angular / 5.0;
+    if angular > 0.0 {
+        dbg!(clamp(1.0 - angular.abs() / max_angular))
+    } else {
+        dbg!(clamp(1.0 - angular.abs() / max_angular_reverse))
+    }
+}
+
 fn motor_run(
     time: Res<Time>,
     keyboard_input: Res<Input<KeyCode>>,
-    mut motors: Query<&mut ExternalTorque, With<Motor>>,
+    mut motors: Query<
+        (&mut ExternalTorque, Ref<AngularVelocity>),
+        With<Motor>,
+    >,
     mut application_points: Query<
         &mut ExternalTorque,
         (With<MotorTorqueBody>, Without<Motor>),
@@ -212,9 +243,13 @@ fn motor_run(
     // both the `f32` and `f64` features. Otherwise you don't need this.
     //let delta_time = time.delta_seconds_f64().adjust_precision();
     
-    let magnitude = -50000000.0;
+    // 100% torque
+    let max_torque = -50000000.0;
+
     // quadratic complexity, but we have one of each so whatever. The code is less bug-prone this way
-    for mut torque in &mut motors {
+    for (mut torque, angular) in &mut motors {
+        let magnitude = max_torque * current_torque(-angular.0);
+        dbg!(magnitude);
         for mut antitorque in &mut application_points {
             if keyboard_input.any_pressed([KeyCode::W, KeyCode::Up]) {
                 *torque = ExternalTorque::new(magnitude)
