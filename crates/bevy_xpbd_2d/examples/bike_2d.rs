@@ -12,19 +12,22 @@ fn main() {
         .insert_resource(ClearColor(Color::rgb(0.05, 0.05, 0.1)))
         .insert_resource(SubstepCount(50))
         // higher gravity makes the wheelies faster
-        .insert_resource(Gravity(Vector::NEG_Y * 40.0))
+        .insert_resource(Gravity(Vector::NEG_Y * 80.0))
         .add_systems(Startup, setup)
         .add_systems(Update, motor_run)
         .add_systems(Update, camera_follow)
         .run();
 }
 
-/// MotorCamera centers on this. Player applies torque to this.
+/// Player applies torque to this.
 #[derive(Component)]
 struct Motor;
 
 #[derive(Component)]
-struct MotorCamera;
+struct BikeCamera;
+
+#[derive(Component)]
+struct BikeCameraTarget;
 
 /// The part of the body where motor torque should be applied as a fake reaction force (in the opposite direction compared to the motor).
 #[derive(Component)]
@@ -33,7 +36,7 @@ struct MotorTorqueBody;
 fn setup(mut commands: Commands) {
     commands.spawn((
         Camera2dBundle::default(),
-        MotorCamera,
+        BikeCamera,
     ));
 
     let square_sprite = Sprite {
@@ -126,6 +129,7 @@ fn setup(mut commands: Commands) {
                 ..Default::default()
             },
             MotorTorqueBody,
+            BikeCameraTarget,
         ))
         .id();
         
@@ -136,9 +140,8 @@ fn setup(mut commands: Commands) {
             // also: maybe this reduces bounciness..
             .with_compliance(0.000001)
             // ...together with this. When landing from a jump, the compliance accepts the jolt and damping dissipates it.
-            // It feels a bit rubbery, though, and limits angling for wheelies for some reason.
-            // TODO: limit torque when flying
-            .with_linear_velocity_damping(15.0)
+            // It feels a bit rubbery, though, and limits angling for wheelies for some reason. It might be fixable by introducing another joint type and replacing joint_damping system with one that treats radial velocity different than axial.
+            .with_linear_velocity_damping(5.0)
             // maybe this will reduce bounciness on touching the ground: the contact with the ground will not try to move the entire mass of the bike but only the wheel - less of a jolt.
             .with_angular_velocity_damping(0.0),
         Motor,
@@ -148,7 +151,7 @@ fn setup(mut commands: Commands) {
         RevoluteJoint::new(wheel, body)
             .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * 100.0)
             .with_compliance(0.000001)
-            .with_linear_velocity_damping(15.0),
+            .with_linear_velocity_damping(5.0),
     );
     
     const FLOOR_WIDTH: u64 = 100000;
@@ -221,9 +224,9 @@ fn current_torque(angular: f32) -> f32 {
     let max_angular = 30.0;
     let max_angular_reverse = max_angular / 5.0;
     if angular > 0.0 {
-        dbg!(clamp(1.0 - angular.abs() / max_angular))
+        clamp(1.0 - angular.abs() / max_angular)
     } else {
-        dbg!(clamp(1.0 - angular.abs() / max_angular_reverse))
+        clamp(1.0 - angular.abs() / max_angular_reverse)
     }
 }
 
@@ -249,23 +252,18 @@ fn motor_run(
     // quadratic complexity, but we have one of each so whatever. The code is less bug-prone this way
     for (mut torque, angular) in &mut motors {
         let magnitude = max_torque * current_torque(-angular.0);
-        dbg!(magnitude);
         for mut antitorque in &mut application_points {
             if keyboard_input.any_pressed([KeyCode::W, KeyCode::Up]) {
                 *torque = ExternalTorque::new(magnitude)
                     .with_persistence(false);
-                //*torque = ExternalForce::new(Vec2::new(magnitude, 0.0))
-                  //  .with_persistence(false);
-                
-                *antitorque = ExternalTorque::new(-magnitude)
+                // the linear damping on joints interferes with torque. Let's make it stronger
+                *antitorque = ExternalTorque::new(-magnitude * 5.0)
                     .with_persistence(false);
             } else if keyboard_input.any_pressed([KeyCode::S, KeyCode::Down]) {
                 *torque = ExternalTorque::new(-magnitude)
                     .with_persistence(false);
-                //torque.0 -= 2.0;
-                //*torque = ExternalForce::new(Vec2::new(-magnitude, 0.0))
-                  //  .with_persistence(false);
-                *antitorque = ExternalTorque::new(magnitude)
+                // the linear damping on joints interferes with torque. Let's make it stronger
+                *antitorque = ExternalTorque::new(magnitude * 5.0)
                     .with_persistence(false);
             }
         }
@@ -273,14 +271,14 @@ fn motor_run(
 }
 
 fn camera_follow(
-    // the Motor could be a Resource instead, but grabbing the Entity directly saves Resource setup and is just as easy.
-    motors: Query<Ref<Transform>, With<Motor>>,
+    // the Target could be a Resource instead, but grabbing the Entity directly saves Resource setup and is just as easy.
+    targets: Query<Ref<Transform>, With<BikeCameraTarget>>,
     mut cameras: Query<
         &mut Transform,
-        (With<MotorCamera>, Without<Motor>),
+        (With<BikeCamera>, Without<BikeCameraTarget>),
     >,
 ) {
-    let motor_x = motors.single().translation.x;
+    let motor_x = targets.single().translation.x;
     let mut camera_transform = cameras.single_mut();
     camera_transform.translation.x = motor_x + 300.0; // TODO: base offset on viewport width
 }
