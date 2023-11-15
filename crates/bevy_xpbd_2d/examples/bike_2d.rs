@@ -246,7 +246,7 @@ fn motor_run(
     time: Res<Time>,
     keyboard_input: Res<Input<KeyCode>>,
     mut motors: Query<
-        (&mut ExternalTorque, Ref<AngularVelocity>, Ref<Transform>),
+        (&mut ExternalTorque, Ref<AngularVelocity>, Ref<LinearVelocity>, Ref<Transform>),
         With<Motor>,
     >,
     mut application_points: Query<
@@ -266,7 +266,7 @@ fn motor_run(
     let max_torque = -50000000.0;
 
     // quadratic complexity, but we have one of each so whatever. The code is less bug-prone this way
-    for (mut torque, angular, motor_transform) in &mut motors {
+    for (mut torque, angular, linear, motor_transform) in &mut motors {
         let magnitude = max_torque * current_torque(-angular.0);
         for mut antitorque in &mut application_points {
             if keyboard_input.any_pressed([KeyCode::W, KeyCode::Up]) {
@@ -285,13 +285,24 @@ fn motor_run(
             // Not physical: straightening the bike back to horizontal. Hopefully gives a better feel.
             else {
                 let wheel_translation = wheels.single().translation;
-                let horz_difference = (wheel_translation.x - motor_transform.translation.x).abs();
-                let vert_difference = (wheel_translation.y - motor_transform.translation.y).abs();
+                let horz_difference = wheel_translation.x - motor_transform.translation.x;
+                let vert_difference = wheel_translation.y - motor_transform.translation.y;
                 
-                // something to go from 1.0 when wheels are vertical to 0.0 when horizontal
-                let straightening_factor = vert_difference.atan2(horz_difference)
-                    // normalize the radians
-                    / (std::f32::consts::TAU / 4.0);
+                let angle = vert_difference.atan2(horz_difference);
+                
+                // About 1 o'clock, to emulate air resistance keeping the whole thing upright.
+                let ideal_angle = std::f32::consts::TAU / 4.0 - std::f32::consts::TAU / 16.0;
+                
+                let difference_to_ideal = ideal_angle - angle;
+                
+                // something to destabilize: goes from 1.0 when wheels are perfect to 0.0 when horizontal
+                let straightening_factor = if difference_to_ideal > 0.0 {
+                    // before reaching tipping point: flat to ideal_angle scaling
+                    1.0 - difference_to_ideal / ideal_angle
+                } else {
+                    // ideal_angle to flipped upside down takes the complementary part of a half-turn
+                    -1.0 + difference_to_ideal / (std::f32::consts::TAU / 2.0 - ideal_angle)
+                };
                 
                 *antitorque = ExternalTorque::new(magnitude * 5.0 * dbg!(straightening_factor))
                     .with_persistence(false);
