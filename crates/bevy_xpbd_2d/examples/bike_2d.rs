@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::transform::TransformSystem;
 use bevy_xpbd_2d::{math::*, prelude::*};
 use examples_common_2d::XpbdExamplePlugin;
 
@@ -15,7 +16,11 @@ fn main() {
         .insert_resource(Gravity(Vector::NEG_Y * 80.0))
         .add_systems(Startup, setup)
         .add_systems(Update, motor_run)
-        .add_systems(Update, camera_follow)
+        .add_systems(
+            PostUpdate, camera_follow
+                .after(bevy_xpbd_2d::PhysicsSet::Sync)
+                .before(TransformSystem::TransformPropagate)
+        )
         .run();
 }
 
@@ -117,6 +122,7 @@ fn setup(mut commands: Commands) {
         .spawn((
             SpriteBundle {
                 sprite: square_sprite,
+                transform: Transform::from_xyz(50.0, 0.0, 0.0),
                 ..default()
             },
             RigidBody::Dynamic,
