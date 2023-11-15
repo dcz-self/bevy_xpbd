@@ -174,6 +174,7 @@ fn setup(
     
     const FLOOR_WIDTH: u64 = 100000;
     
+    /*
     commands.spawn((
         SpriteBundle {
             sprite: floor_sprite.clone(),
@@ -183,9 +184,10 @@ fn setup(
         },
         RigidBody::Static,
         Collider::cuboid(50.0, 50.0),
-    ));
+    ));*/
     
     // A tilted section of the floor to test jumps
+    /*
     commands.spawn((
         SpriteBundle {
             sprite: floor_sprite.clone(),
@@ -196,7 +198,7 @@ fn setup(
         },
         RigidBody::Static,
         Collider::cuboid(50.0, 50.0),
-    ));
+    ));*/
     
     const CLOUD_SPACING: u64 = 300;
     
@@ -227,8 +229,14 @@ fn setup(
     // bumpy floor
     {
         let tops = (0..300).map(|i| [
-            i as f32 * 300.0,
-            hash(i) as f32 / (1u64 << 32) as f32 * 30.0,
+            // offset
+            i as f32 * 600.0 + 
+            // normalize to 0..1
+            (hash(hash(i) as u64) as f32 / (1u64 << 32) as f32)
+            // stretch to 300..3300
+                * 3000.0 + 300.0,
+            // height
+            hash(i) as f32 / (1u64 << 32) as f32 * 150.0,
             0.0,
         ]);
         
@@ -245,14 +253,14 @@ fn setup(
         let bumps_mesh = meshes
             .add(mesh.clone())
             .into();
-        let bumps_material = materials.add(ColorMaterial::from(Color::rgb(0.2, 0.7, 0.9)));
+        let bumps_material = materials.add(ColorMaterial::from(Color::rgb(0.2, 0.7, 0.2)));
         
         commands
             .spawn((
                 MaterialMesh2dBundle {
                     mesh: bumps_mesh,
                     material: bumps_material,
-                    transform: Transform::from_xyz(-300.0, -300.0, 0.0),
+                    transform: Transform::from_xyz(-600.0, -350.0, 0.0),
                     ..default()
                 },
                 RigidBody::Static,
