@@ -1,7 +1,9 @@
 use bevy::prelude::*;
+use bevy::sprite::MaterialMesh2dBundle;
 use bevy::transform::TransformSystem;
 use bevy_xpbd_2d::{math::*, prelude::*};
 use examples_common_2d::XpbdExamplePlugin;
+use itertools::interleave;
 
 //use bevy_editor_pls;
 
@@ -42,7 +44,11 @@ struct BikeCameraTarget;
 #[derive(Component)]
 struct MotorTorqueBody;
 
-fn setup(mut commands: Commands) {
+fn setup(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
     commands.spawn((
         Camera2dBundle::default(),
         BikeCamera,
@@ -200,10 +206,10 @@ fn setup(mut commands: Commands) {
         ..default()
     };
     
-    fn hash(v: u64) -> u64 {
+    fn hash(v: u64) -> u32 {
         // Something something Knuth.
         // https://stackoverflow.com/a/665545
-        (v * 2654435761) % (1 << 32)
+        (v.wrapping_mul(2654435761) % (1 << 32)) as u32
     }
     
     for i in 0..(FLOOR_WIDTH / CLOUD_SPACING) {
@@ -216,6 +222,45 @@ fn setup(mut commands: Commands) {
                 .with_rotation(Quat::from_rotation_z(hash(i) as f32)),
             ..default()
         });
+    }
+    
+    // bumpy floor
+    {
+        let tops = (0..300).map(|i| [
+            i as f32 * 300.0,
+            hash(i) as f32 / (1u64 << 32) as f32 * 30.0,
+            0.0,
+        ]);
+        
+        let bottoms = tops.clone().map(|[x, y, z]| [x, y + 100.0, z]);
+        
+        let vertices = interleave(tops, bottoms).collect::<Vec<_>>();
+        
+        let normals = (0..600).map(|_| [0.0, 0.0, 1.0]).collect::<Vec<_>>();
+        
+        let mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleStrip)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices.clone())
+            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+            
+        let bumps_mesh = meshes
+            .add(mesh.clone())
+            .into();
+        let bumps_material = materials.add(ColorMaterial::from(Color::rgb(0.2, 0.7, 0.9)));
+        
+        commands
+            .spawn((
+                MaterialMesh2dBundle {
+                    mesh: bumps_mesh,
+                    material: bumps_material,
+                    transform: Transform::from_xyz(-300.0, -300.0, 0.0),
+                    ..default()
+                },
+                RigidBody::Static,
+                Collider::trimesh(
+                    vertices.into_iter().map(|[x,y,_]| Vec2::new(x, y)).collect(),
+                    (0..598).map(|i| [i, i+1, i+2]).collect(),
+                )
+            ));
     }
 }
 
