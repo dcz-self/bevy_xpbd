@@ -24,6 +24,10 @@ fn main() {
         .run();
 }
 
+/// Used to straighten the bike to horizontal together with the Motor.
+#[derive(Component)]
+struct Wheel;
+
 /// Player applies torque to this.
 #[derive(Component)]
 struct Motor;
@@ -115,6 +119,8 @@ fn setup(mut commands: Commands) {
                 dynamic_coefficient: 1000.0,
                 ..Default::default()
             },
+            
+            Wheel,
         ))
         .id();
         
@@ -141,7 +147,7 @@ fn setup(mut commands: Commands) {
         
     commands.spawn((
         RevoluteJoint::new(motor, body)
-            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -100.0)
+            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * -150.0)
             // way glitchy otherwise. A guess: if the collision has a smooth transition between "no contact" and "full force", then it doesn't "overreact" when the time step missed the exact time of something happening. Similar effect might have been had by adding penetration to the wheel (deformation), but doing that is underdocumented.
             // also: maybe this reduces bounciness..
             .with_compliance(0.000001)
@@ -155,7 +161,7 @@ fn setup(mut commands: Commands) {
 
     commands.spawn(
         RevoluteJoint::new(wheel, body)
-            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * 100.0)
+            .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * 50.0)
             .with_compliance(0.000001)
             .with_linear_velocity_damping(5.0),
     );
@@ -240,12 +246,16 @@ fn motor_run(
     time: Res<Time>,
     keyboard_input: Res<Input<KeyCode>>,
     mut motors: Query<
-        (&mut ExternalTorque, Ref<AngularVelocity>),
+        (&mut ExternalTorque, Ref<AngularVelocity>, Ref<Transform>),
         With<Motor>,
     >,
     mut application_points: Query<
         &mut ExternalTorque,
         (With<MotorTorqueBody>, Without<Motor>),
+    >,
+    wheels: Query<
+        Ref<Transform>,
+        (With<Wheel>, Without<Motor>),
     >,
 ) {
     // Precision is adjusted so that the example works with
@@ -256,7 +266,7 @@ fn motor_run(
     let max_torque = -50000000.0;
 
     // quadratic complexity, but we have one of each so whatever. The code is less bug-prone this way
-    for (mut torque, angular) in &mut motors {
+    for (mut torque, angular, motor_transform) in &mut motors {
         let magnitude = max_torque * current_torque(-angular.0);
         for mut antitorque in &mut application_points {
             if keyboard_input.any_pressed([KeyCode::W, KeyCode::Up]) {
@@ -270,6 +280,20 @@ fn motor_run(
                     .with_persistence(false);
                 // the linear damping on joints interferes with torque. Let's make it stronger
                 *antitorque = ExternalTorque::new(magnitude * 5.0)
+                    .with_persistence(false);
+            }
+            // Not physical: straightening the bike back to horizontal. Hopefully gives a better feel.
+            else {
+                let wheel_translation = wheels.single().translation;
+                let horz_difference = (wheel_translation.x - motor_transform.translation.x).abs();
+                let vert_difference = (wheel_translation.y - motor_transform.translation.y).abs();
+                
+                // something to go from 1.0 when wheels are vertical to 0.0 when horizontal
+                let straightening_factor = vert_difference.atan2(horz_difference)
+                    // normalize the radians
+                    / (std::f32::consts::TAU / 4.0);
+                
+                *antitorque = ExternalTorque::new(magnitude * 5.0 * dbg!(straightening_factor))
                     .with_persistence(false);
             }
         }
