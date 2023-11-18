@@ -618,7 +618,7 @@ pub fn joint_damping_revolute(
             let parallel = dv.dot(dpos) * dpos / dpos.dot(dpos);
             
             let delta_v_parallel = parallel;
-            let delta_v_parallel = delta_v_parallel * (100.0 * delta_secs).min(1.0);
+            let delta_v_parallel = delta_v_parallel * (joint.damping_linear() * delta_secs).min(1.0);
 
             let w1 = if rb1.is_dynamic() { inv_mass1.0 } else { 0.0 };
             let w2 = if rb2.is_dynamic() { inv_mass2.0 } else { 0.0 };
