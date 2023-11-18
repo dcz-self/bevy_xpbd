@@ -159,7 +159,7 @@ fn setup(
             .with_compliance(0.000001)
             // ...together with this. When landing from a jump, the compliance accepts the jolt and damping dissipates it.
             // It feels a bit rubbery, though, and limits angling for wheelies for some reason. It might be fixable by introducing another joint type and replacing joint_damping system with one that treats radial velocity different than axial.
-            .with_linear_velocity_damping(10.0)
+            //.with_linear_velocity_damping(10.0)
             // maybe this will reduce bounciness on touching the ground: the contact with the ground will not try to change the momentum the entire mass of the bike but only the wheel - less of a jolt.
             .with_angular_velocity_damping(0.0),
         Motor,
@@ -169,7 +169,7 @@ fn setup(
         RevoluteJoint::new(wheel, body)
             .with_local_anchor_2(Vector::Y * -100.0 + Vector::X * 50.0)
             .with_compliance(0.000001)
-            .with_linear_velocity_damping(10.0),
+            //.with_linear_velocity_damping(10.0),
     );
     
     const FLOOR_WIDTH: u64 = 100000;

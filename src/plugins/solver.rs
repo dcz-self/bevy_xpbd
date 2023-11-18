@@ -61,7 +61,7 @@ impl Plugin for SolverPlugin {
             (
                 solve_vel,
                 joint_damping::<FixedJoint>,
-                joint_damping::<RevoluteJoint>,
+                joint_damping_revolute,
                 joint_damping::<SphericalJoint>,
                 joint_damping::<PrismaticJoint>,
                 joint_damping::<DistanceJoint>,
@@ -576,6 +576,72 @@ pub fn joint_damping<T: Joint>(
         }
     }
 }
+
+/// Applies velocity corrections caused by joint damping.
+#[allow(clippy::type_complexity)]
+pub fn joint_damping_revolute(
+    mut bodies: Query<
+        (
+            &RigidBody,
+            &PreviousPosition,
+            &mut LinearVelocity,
+            &mut AngularVelocity,
+            &InverseMass,
+            Option<&Dominance>,
+        ),
+        Without<Sleeping>,
+    >,
+    joints: Query<&RevoluteJoint, Without<RigidBody>>,
+    time: Res<Time>,
+) {
+    let delta_secs = time.delta_seconds_adjusted();
+
+    for joint in &joints {
+        if let Ok(
+            [(rb1, pos1, mut lin_vel1, mut ang_vel1, inv_mass1, dominance1), (rb2, pos2, mut lin_vel2, mut ang_vel2, inv_mass2, dominance2)],
+        ) = bodies.get_many_mut(joint.entities())
+        {
+            let delta_omega =
+                (ang_vel2.0 - ang_vel1.0) * (joint.damping_angular() * delta_secs).min(1.0);
+
+            if rb1.is_dynamic() {
+                ang_vel1.0 += delta_omega;
+            }
+            if rb2.is_dynamic() {
+                ang_vel2.0 -= delta_omega;
+            }
+            
+            // Simple version: the joint is at the center of mass of one of the bodies. This way it's a simple two-body problem along one axis, rather than trying to do the same twice along both axes connecting to the offset joint.
+            let dpos = pos2.0 - pos1.0;
+            let dv = lin_vel2.0 - lin_vel1.0;
+
+            let parallel = dv.dot(dpos) * dpos / dpos.dot(dpos);
+            
+            let delta_v_parallel = parallel;
+            let delta_v_parallel = delta_v_parallel * (100.0 * delta_secs).min(1.0);
+
+            let w1 = if rb1.is_dynamic() { inv_mass1.0 } else { 0.0 };
+            let w2 = if rb2.is_dynamic() { inv_mass2.0 } else { 0.0 };
+
+            if w1 + w2 <= Scalar::EPSILON {
+                continue;
+            }
+
+            let p = delta_v_parallel / (w1 + w2);
+
+            let dominance1 = dominance1.map_or(0, |dominance| dominance.0);
+            let dominance2 = dominance2.map_or(0, |dominance| dominance.0);
+
+            if rb1.is_dynamic() && (!rb2.is_dynamic() || dominance1 <= dominance2) {
+                lin_vel1.0 += p * inv_mass1.0;
+            }
+            if rb2.is_dynamic() && (!rb1.is_dynamic() || dominance2 <= dominance1) {
+                lin_vel2.0 -= p * inv_mass2.0;
+            }
+        }
+    }
+}
+
 
 fn apply_translation(
     mut bodies: Query<
